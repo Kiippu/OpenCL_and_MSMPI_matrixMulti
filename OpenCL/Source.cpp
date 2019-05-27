@@ -3,7 +3,7 @@
 #include <iostream>
 #include "Timer.h"
 #include <vector>
-#include <omp.h>
+//#include <omp.h>
 #include <CL/cl.h>
 
 
@@ -16,23 +16,24 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdbool.h>
+#include <Windows.h>
 
 /// N x N matrices
-const int MAX_MATRIX_LENGTH = 8;
+const int MAX_MATRIX_LENGTH = 16;
 const int MAX_MATRIX_SIZE = MAX_MATRIX_LENGTH * MAX_MATRIX_LENGTH;
-const int LOCAL_WORK_DIVISOR = 4;
+const int LOCAL_WORK_DIVISOR = 8;
 
 #define 	MEM_SIZE                (128)
 #define 	MAX_SOURCE_SIZE 	(0x100000)
 
 /// rows and colums NxN
-const int N = 2000;
+const int N = MAX_MATRIX_LENGTH;
 
 MPI_Status status;
 
-double matrix_0[N][N];
-double matrix_1[N][N];
-double matrix_final[N][N];
+float matrix_0[N][N];
+float matrix_1[N][N];
+float matrix_final[N][N];
 
 
 // Allocates a matrix with random float entries.
@@ -46,9 +47,9 @@ void masterThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 	, int& totalProcessors, int& processorDestination, int& sourceID, int& matrixRows, int& rowOffset) {
 	for (i_iter = 0; i_iter < N; i_iter++) {
 		for (j_iter = 0; j_iter < N; j_iter++) {
-			matrix_0[i_iter][j_iter] = 1.0;
-			matrix_1[i_iter][j_iter] = 1.0;
-			matrix_final[i_iter][j_iter] = 0.0;
+			matrix_0[i_iter][j_iter] = 1.0f;
+			matrix_1[i_iter][j_iter] = 1.0f;
+			matrix_final[i_iter][j_iter] = 0.0f;
 		}
 	}
 
@@ -64,8 +65,8 @@ void masterThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 	{
 		MPI_Send(&rowOffset, 1, MPI_INT, processorDestination, 1, MPI_COMM_WORLD);
 		MPI_Send(&matrixRows, 1, MPI_INT, processorDestination, 1, MPI_COMM_WORLD);
-		MPI_Send(&matrix_0[rowOffset][0], matrixRows*N, MPI_DOUBLE, processorDestination, 1, MPI_COMM_WORLD);
-		MPI_Send(&matrix_1, N*N, MPI_DOUBLE, processorDestination, 1, MPI_COMM_WORLD);
+		MPI_Send(&matrix_0[rowOffset][0], matrixRows*N, MPI_FLOAT, processorDestination, 1, MPI_COMM_WORLD);
+		MPI_Send(&matrix_1, N*N, MPI_FLOAT, processorDestination, 1, MPI_COMM_WORLD);
 		/// set new rows to be sent to next iteration
 		rowOffset = rowOffset + matrixRows;
 	}
@@ -76,23 +77,13 @@ void masterThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 		sourceID = i_iter;
 		MPI_Recv(&rowOffset, 1, MPI_INT, sourceID, 2, MPI_COMM_WORLD, &status);
 		MPI_Recv(&matrixRows, 1, MPI_INT, sourceID, 2, MPI_COMM_WORLD, &status);
-		MPI_Recv(&matrix_final[rowOffset][0], matrixRows*N, MPI_DOUBLE, sourceID, 2, MPI_COMM_WORLD, &status);
+		MPI_Recv(&matrix_final[rowOffset][0], matrixRows*N, MPI_FLOAT, sourceID, 2, MPI_COMM_WORLD, &status);
 	}
 
 	/// finish timer for multiplication
 	Timer::getInstance().addFinishTime(eTimeLogType::TT_MULTIPLICATION_BEGIN);
 
-	/// print all results for the matrix
-	// uncommment to see results
-	/*printf("Matrix results:\n");
-	for (i_iter = 0; i_iter < N; i_iter++) {
-		for (j_iter = 0; j_iter < N; j_iter++)
-			printf("%6.2f   ", matrix_final[i_iter][j_iter]);
-		printf("\n");
-	}*/
-
-	/// print time taken
-	Timer::getInstance().printFinalTimeSheet();
+	
 
 };
 
@@ -102,14 +93,29 @@ void workerThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 	sourceID = 0;
 	MPI_Recv(&rowOffset, 1, MPI_INT, sourceID, 1, MPI_COMM_WORLD, &status);
 	MPI_Recv(&matrixRows, 1, MPI_INT, sourceID, 1, MPI_COMM_WORLD, &status);
-	MPI_Recv(&matrix_0, matrixRows*N, MPI_DOUBLE, sourceID, 1, MPI_COMM_WORLD, &status);
-	MPI_Recv(&matrix_1, N*N, MPI_DOUBLE, sourceID, 1, MPI_COMM_WORLD, &status);
+	MPI_Recv(&matrix_0, matrixRows*N, MPI_FLOAT, sourceID, 1, MPI_COMM_WORLD, &status);
+	MPI_Recv(&matrix_1, N*N, MPI_FLOAT, sourceID, 1, MPI_COMM_WORLD, &status);
 
-	/*/// per process matrix multiplication 
-	omp_set_dynamic(0);
+
+	printf("\n\n thread :%d \n", processorID);
+
+
+	/*printf("BEFORE - Matrix results:\n");
+	for (int i = 0; i < N; i++) {
+		for (int j = 0; j < N; j++)
+			printf("%6.2f   ", matrix_final[i][j]);
+		printf("\n");
+	}*/
+
+
+
+
+	//printf("matrixRows: %d\n", matrixRows);
+	/// per process matrix multiplication 
+	/*omp_set_dynamic(0);
 	omp_set_num_threads(maxNumThreads);
-	#pragma omp parallel for 
-	for (k_iter = 0; k_iter < N; k_iter++)
+	#pragma omp parallel for */
+	/*for (k_iter = 0; k_iter < N; k_iter++)
 	{
 		for (i_iter = 0; i_iter < matrixRows; i_iter++)
 		{
@@ -117,6 +123,37 @@ void workerThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 				matrix_final[i_iter][k_iter] += matrix_0[i_iter][j_iter] * matrix_1[j_iter][k_iter];
 		}
 	}*/
+
+	int matrixSize = MAX_MATRIX_SIZE / totalProcessors;
+
+	////Allocate host memory for matrices A and B
+	unsigned int matrix_0_mem_size = sizeof(float) * matrixSize;//(matrixRows*MAX_MATRIX_LENGTH);
+	float* matrix_0_host_mem = (float*)malloc(matrix_0_mem_size);
+
+	unsigned int matrix_1_mem_size = sizeof(float) * MAX_MATRIX_SIZE;
+	float* matrix_1_host_mem = (float*)malloc(matrix_1_mem_size);
+
+
+	for (k_iter = 0; k_iter < (matrixRows); k_iter++)
+	{
+		for (i_iter = 0; i_iter < MAX_MATRIX_LENGTH; i_iter++)
+		{
+			matrix_0_host_mem[(k_iter * MAX_MATRIX_LENGTH) + i_iter] = matrix_0[k_iter][i_iter];
+			
+		}
+	}
+	printf("\n\nmatrix_0_host_mem == matrixRows: %d, k:%d, i:%d\n", matrixRows, k_iter, i_iter);
+
+
+	for (k_iter = 0; k_iter < MAX_MATRIX_LENGTH; k_iter++)
+	{
+		for (i_iter = 0; i_iter < MAX_MATRIX_LENGTH; i_iter++)
+		{
+			//matrix_0_host_mem[(k_iter * MAX_MATRIX_LENGTH) + i_iter] = matrix_0[k_iter][i_iter];
+			matrix_1_host_mem[(k_iter * MAX_MATRIX_LENGTH) + i_iter] = matrix_1[k_iter][i_iter];
+		}
+	}
+	printf("\n\nmatrix_1_host_mem == matrixRows: %d, k:%d, i:%d\n", matrixRows, k_iter, i_iter);
 
 	///////////////////////////////////////////////////////////////////////////////////////
 
@@ -132,16 +169,11 @@ void workerThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 	cl_mem matrix_1_mem;
 	cl_mem matrix_2_mem;
 
-	//Allocate host memory for matrices A and B
-	unsigned int matrix_0_mem_size = sizeof(float) * MAX_MATRIX_SIZE;
-	float* matrix_0_host_mem = (float*)malloc(matrix_0_mem_size);
-
-	unsigned int matrix_1_mem_size = sizeof(float) * MAX_MATRIX_SIZE;
-	float* matrix_1_host_mem = (float*)malloc(matrix_1_mem_size);
 
 	//Initialize host memory
-	randomMemInit(matrix_0_host_mem, MAX_MATRIX_SIZE);
-	randomMemInit(matrix_1_host_mem, MAX_MATRIX_SIZE);
+	//randomMemInit(matrix_0_host_mem, MAX_MATRIX_SIZE);
+	//randomMemInit(matrix_1_host_mem, MAX_MATRIX_SIZE);
+
 
 	//Allocate host memory for the result C
 	unsigned int matrix_2_mem_size = sizeof(float) * MAX_MATRIX_SIZE;
@@ -149,7 +181,7 @@ void workerThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 
 	printf("Initializing OpenCL device...\n");
 
-	cl_uint dev_cnt = 0;
+	cl_uint dev_cnt = processorID;
 	clGetPlatformIDs(0, 0, &dev_cnt);
 
 	cl_platform_id platform_ids[100];
@@ -218,7 +250,7 @@ void workerThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 
 	// Create the compute kernel in the program we wish to run
 	//
-	kernel = clCreateKernel(program, "mult_vec_gpu", &errMsg);
+	kernel = clCreateKernel(program, "mult_vec1_gpu", &errMsg);
 	if (!kernel || errMsg != CL_SUCCESS)
 	{
 		printf("Error: Failed to create compute kernel!\n");
@@ -226,7 +258,7 @@ void workerThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 	}
 
 	// Create the input and output arrays in device memory for our calculation
-	matrix_2_mem = clCreateBuffer(context, CL_MEM_READ_WRITE, matrix_0_mem_size, NULL, &errMsg);
+	matrix_2_mem = clCreateBuffer(context, CL_MEM_READ_WRITE, matrix_2_mem_size, matrix_2_host_mem, &errMsg);
 	matrix_0_mem = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, matrix_0_mem_size, matrix_0_host_mem, &errMsg);
 	matrix_1_mem = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, matrix_1_mem_size, matrix_1_host_mem, &errMsg);
 
@@ -245,7 +277,7 @@ void workerThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 	errMsg |= clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&matrix_0_mem);
 	errMsg |= clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&matrix_1_mem);
 	errMsg |= clSetKernelArg(kernel, 3, sizeof(int), (void *)&MAX_MATRIX_LENGTH);
-	errMsg |= clSetKernelArg(kernel, 4, sizeof(int), (void *)&MAX_MATRIX_LENGTH);
+	errMsg |= clSetKernelArg(kernel, 4, sizeof(int), (void *)&rowOffset);
 
 	if (errMsg != CL_SUCCESS)
 	{
@@ -275,16 +307,62 @@ void workerThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 
 	//Retrieve result from device
 	errMsg = clEnqueueReadBuffer(commands, matrix_2_mem, CL_TRUE, 0, matrix_2_mem_size, matrix_2_host_mem, 0, NULL, NULL);
-
+	printf("just finshed opencl ID %d\n", processorID);
 	if (errMsg != CL_SUCCESS)
 	{
 		printf("Error: Failed to read output array! %d\n", errMsg);
 		exit(1);
 	}
 
-	//print out the results
+	///////////////////////////////////////////////////////////////////////
 
-	printf("\n\nMatrix C (Results)\n");
+	printf("rowOffset: %d\n", rowOffset);
+	/*for (int k = rowOffset; k < MAX_MATRIX_LENGTH; k++)
+	{
+		for (int i = 0; i < matrixRows; i++)
+		{
+			matrix_final[k][i] = matrix_2_host_mem[(k*MAX_MATRIX_LENGTH) + i];
+		}
+	}*/
+	/// this does first 4 columns
+	/*for (int k = 0; k < N; k++)
+	{
+		for (int i = 0; i < N; i++)
+		{
+			matrix_final[k][i] = matrix_2_host_mem[(k*MAX_MATRIX_LENGTH) + i];
+		}
+	}*/
+	//if (processorID == 2) {
+	//printf("matrixRows: %d, k:%d, i:%d\n", matrixRows, k_iter, i_iter);
+		for (k_iter = 0; k_iter < (N); k_iter++)
+		{
+			for (i_iter = 0; i_iter < N; i_iter++)
+			{
+				matrix_final[i_iter][k_iter] = matrix_2_host_mem[(k_iter*MAX_MATRIX_LENGTH) + i_iter];
+				//printf("i:%d, k:%d, ind:%d\t", i_iter, k_iter, (k_iter*MAX_MATRIX_LENGTH) + i_iter);
+			}
+		}
+		//printf("matrixRows: %d, k:%d, i:%d\n", matrixRows, k_iter, i_iter);
+	//}
+
+	///////////////////////////////////////////////////////////////////////
+	/*int poo2 = (MAX_MATRIX_LENGTH / totalProcessors);
+	int poo = (rowOffset*MAX_MATRIX_LENGTH) + (MAX_MATRIX_SIZE / totalProcessors);
+	printf("\n\npoo: %d\n\n", poo);
+
+	for (int k = (rowOffset); k < (rowOffset+ poo2); k++)
+	{
+		for (int i = 0; i < N; i++)
+		{
+			matrix_final[k][i] = matrix_2_host_mem[(k*MAX_MATRIX_LENGTH) + i];
+			printf("i: %d = %d, ", (k*MAX_MATRIX_LENGTH) + i), matrix_2_host_mem[(k*MAX_MATRIX_LENGTH) + i];
+		}
+	}
+*/
+	//////////////////////////////////////////////////////////////////////
+
+	//print out the results
+	/*printf("\n\nMatrix openCL (Results)\n");
 	int i;
 	for (i = 0; i < MAX_MATRIX_SIZE; i++)
 	{
@@ -292,7 +370,14 @@ void workerThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 		if (((i + 1) % MAX_MATRIX_LENGTH) == 0)
 			printf("\n");
 	}
-	printf("\n");
+	printf("\n");*/
+
+	/*printf("\n\nMatrix mpi:\n");
+	for (i_iter = 0; i_iter < N; i_iter++) {
+		for (j_iter = 0; j_iter < N; j_iter++)
+			printf("%6.2f   ", matrix_final[i_iter][j_iter]);
+		printf("\n");
+	}*/
 
 
 	printf("Matrix multiplication completed...\n");
@@ -318,7 +403,7 @@ void workerThread(int& i_iter, int& j_iter, int& k_iter, int& processorID, int& 
 	/// sending matrix data back to the master thread
 	MPI_Send(&rowOffset, 1, MPI_INT, 0, 2, MPI_COMM_WORLD);
 	MPI_Send(&matrixRows, 1, MPI_INT, 0, 2, MPI_COMM_WORLD);
-	MPI_Send(&matrix_final, matrixRows*N, MPI_DOUBLE, 0, 2, MPI_COMM_WORLD);
+	MPI_Send(&matrix_final, matrixRows*N, MPI_FLOAT, 0, 2, MPI_COMM_WORLD);
 
 };
 
@@ -339,11 +424,25 @@ int main(int argc, char **argv)
 	MPI_Comm_size(MPI_COMM_WORLD, &processorNum);
 
 	totalProcessors = processorNum - 1;
+	printf("totalProcessors: %d", totalProcessors);
 
 	/// Master Process 
 	// in charge of sending and setting array data to processors
 	if (processorID == 0) {
 		masterThread(i_iter, j_iter, k_iter, processorID, processorNum, totalProcessors, processorDestination, sourceID, matrixRows, rowOffset);
+
+		/// print all results for the matrix
+		// uncommment to see results
+		printf("Matrix results:\n");
+		for (int i = 0; i < N; i++) {
+			for (int j = 0; j < N; j++)
+				printf("%6.2f, ", matrix_final[i][j]);
+			printf("\n");
+		}
+
+		/// print time taken
+		Timer::getInstance().printFinalTimeSheet();
+
 	}
 
 	/// All processors but master thread
@@ -352,6 +451,7 @@ int main(int argc, char **argv)
 	}
 	
 	MPI_Finalize();
+
 	return 0;
 }
 
