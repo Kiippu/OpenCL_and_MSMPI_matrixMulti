@@ -126,13 +126,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="MPIOpen.cpp" />
-    <ClCompile Include="openCL.cpp" />
     <ClCompile Include="Source.cpp" />
     <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="vector_add_kernel.cl" />
     <None Include="vector_multiplication_kernel.cl" />
   </ItemGroup>
   <ItemGroup>

@@ -18,24 +18,15 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="vector_add_kernel.cl">
-      <Filter>Source Files\kernels</Filter>
-    </None>
     <None Include="vector_multiplication_kernel.cl">
       <Filter>Source Files\kernels</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="openCL.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Source.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Timer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MPIOpen.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
